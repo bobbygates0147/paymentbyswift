@@ -5,7 +5,7 @@ import Link from "next/link";
 import PortalHeader from "../components/portal-header";
 import { saveOTPAttempt, getCurrentLoginUser, clearCurrentLoginUser } from "../utils/auth";
 
-const LOGIN_OTP = "0147";
+const LOGIN_OTP = "014700";
 
 export default function OtpPage() {
   const [code, setCode] = useState("");
@@ -56,9 +56,10 @@ export default function OtpPage() {
               name="otpCode"
               type="text"
               inputMode="numeric"
-              pattern="[0-9]{4}"
-              maxLength={4}
-              placeholder="Enter 4-digit code"
+              pattern="[0-9]{6}"
+              minLength={6}
+              maxLength={6}
+              placeholder="Enter 6-digit code"
               value={code}
               onChange={(event) => setCode(event.target.value)}
               required
