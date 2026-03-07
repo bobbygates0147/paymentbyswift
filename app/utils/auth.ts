@@ -20,6 +20,17 @@ const apiUrl = (path: string): string => {
   return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
+const parseJsonSafely = async (response: Response): Promise<any | null> => {
+  const rawBody = await response.text();
+  if (!rawBody) return null;
+
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    return null;
+  }
+};
+
 // Call MongoDB API to login
 export const loginWithDatabase = async (email: string, password: string) => {
   try {
@@ -31,11 +42,28 @@ export const loginWithDatabase = async (email: string, password: string) => {
       body: JSON.stringify({ email, password }),
     });
 
-    const data = await response.json();
+    const data = await parseJsonSafely(response);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message:
+          (data && typeof data.message === 'string' && data.message) ||
+          `Login request failed (${response.status})`,
+      };
+    }
+
+    if (!data || typeof data !== 'object') {
+      return { success: false, message: 'Unexpected login response.' };
+    }
+
     return data;
   } catch (error) {
     console.error('Login error:', error);
-    return { success: false, message: 'Network error' };
+    return {
+      success: false,
+      message: 'Cannot reach login service. Check API URL or deployment runtime logs.',
+    };
   }
 };
 
