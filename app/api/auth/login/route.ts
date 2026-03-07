@@ -3,6 +3,7 @@ import { connectDB } from '@/lib/mongodb';
 import User from '@/lib/models/User';
 import LoginAttempt from '@/lib/models/LoginAttempt';
 import { ensureAdminUser } from '@/lib/adminAuth';
+import { setAdminSessionCookie } from '@/lib/adminSession';
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
     loginAttempt.userId = user._id.toString();
     await loginAttempt.save();
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         success: true,
         message: 'Login successful',
@@ -64,6 +65,12 @@ export async function POST(request: NextRequest) {
       },
       { status: 200 }
     );
+
+    if (user.role === 'admin') {
+      setAdminSessionCookie(response, user.email);
+    }
+
+    return response;
   } catch (error: any) {
     console.error('Login error:', error);
     return NextResponse.json(

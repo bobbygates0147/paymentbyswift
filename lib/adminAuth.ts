@@ -1,21 +1,15 @@
 import User from '@/lib/models/User';
 
-const DEFAULT_ADMIN_EMAIL = 'admin@drema.com';
-const DEFAULT_ADMIN_PASSWORD = '19metameta';
-
 export function getAdminCredentials() {
-  const email = (
-    process.env.ADMIN_EMAIL ||
-    process.env.NEXT_PUBLIC_ADMIN_EMAIL ||
-    DEFAULT_ADMIN_EMAIL
-  )
+  const email = (process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || '')
     .trim()
     .toLowerCase();
 
-  const password =
-    process.env.ADMIN_PASSWORD ||
-    process.env.NEXT_PUBLIC_ADMIN_PASSWORD ||
-    DEFAULT_ADMIN_PASSWORD;
+  const password = process.env.ADMIN_PASSWORD || process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '';
+
+  if (!email || !password) {
+    throw new Error('Admin credentials are missing. Set ADMIN_EMAIL and ADMIN_PASSWORD.');
+  }
 
   return { email, password };
 }

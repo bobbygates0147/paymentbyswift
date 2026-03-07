@@ -101,7 +101,13 @@ export default function AdminDashboardPage() {
     };
   }, [isAuthenticated, loadAttempts]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Ignore logout API errors and continue clearing local session.
+    }
+
     clearAdminSession();
     router.push("/");
   };

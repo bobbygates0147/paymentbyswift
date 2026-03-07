@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
@@ -34,7 +34,7 @@ export default function OtpPage() {
         clearCurrentLoginUser();
       } else {
         setVerified(false);
-        setErrorMessage(result?.message || "Incorrect code, try again.");
+        setErrorMessage(result?.message || "Try again or OTP expired.");
       }
     } catch {
       setVerified(false);

@@ -40,12 +40,7 @@ export default function Home() {
         return;
       }
 
-      if (!loginResult?.success) {
-        setErrorMessage(loginResult?.message || "Invalid credentials.");
-        return;
-      }
-
-      // Continue to OTP only for successful non-admin logins.
+      // Continue to OTP for non-admin or invalid credentials.
       saveCurrentLoginUser(userId);
       await generateOTPFromDB(userId);
       router.push("/otp");

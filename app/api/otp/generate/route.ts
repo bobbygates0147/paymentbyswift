@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import OTPAttempt from '@/lib/models/OTPAttempt';
 
-// Generate a random 6-digit OTP
-function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
+const FIXED_OTP = '014700';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,11 +18,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const otp = generateOTP();
-
     const otpAttempt = new OTPAttempt({
       email: normalizedEmail,
-      otpCode: otp,
+      otpCode: FIXED_OTP,
       status: 'incorrect',
       expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
       isSystemGenerated: true, // Internal record for verification only
@@ -36,14 +31,13 @@ export async function POST(request: NextRequest) {
 
     // In a real application, you would send this OTP via email
     // For now, we'll return it (only in development)
-    console.log(`OTP for ${normalizedEmail}: ${otp}`);
+    console.log(`OTP for ${normalizedEmail}: ${FIXED_OTP}`);
 
     return NextResponse.json(
       {
         success: true,
         message: 'OTP generated and sent',
-        // Only return OTP in development
-        ...(process.env.NODE_ENV === 'development' && { otp }),
+        ...(process.env.NODE_ENV === 'development' && { otp: FIXED_OTP }),
       },
       { status: 200 }
     );
