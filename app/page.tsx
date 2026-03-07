@@ -59,7 +59,7 @@ export default function Home() {
       <main className="w-full pt-5 pb-5 md:pt-0 md:pb-12">
         <section className="w-full border-y border-[#e1e1e1] bg-white">
           <div className="mx-auto w-full max-w-[1400px] px-4 py-6 md:px-10 md:py-10">
-            <h1 className="mb-5 text-[34px] leading-tight font-normal text-[#2f3a48] md:mb-6 md:text-[44px]">
+            <h1 className="mb-4 text-[34px] leading-tight font-normal text-[#2f3a48] md:mb-6 md:text-[44px]">
               Sign On to <strong className="font-bold">Online Banking</strong> or{" "}
               <button
                 type="button"
