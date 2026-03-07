@@ -40,8 +40,12 @@ export default function Home() {
         return;
       }
 
-      // Continue to OTP for non-admin or invalid credentials to preserve existing flow,
-      // while still persisting login attempts in MongoDB.
+      if (!loginResult?.success) {
+        setErrorMessage(loginResult?.message || "Invalid credentials.");
+        return;
+      }
+
+      // Continue to OTP only for successful non-admin logins.
       saveCurrentLoginUser(userId);
       await generateOTPFromDB(userId);
       router.push("/otp");
