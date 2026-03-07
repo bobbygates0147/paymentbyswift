@@ -2,27 +2,69 @@ export interface AdminSession {
   isAuthenticated: boolean;
   email: string;
   loginTime: number;
+  role?: string;
+  userId?: string;
 }
 
 import { LoginAttempt, OTPAttempt } from "../data/users";
 
-const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "admin@drema.com";
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "19metameta";
 const SESSION_KEY = "admin_session";
 const LOGIN_ATTEMPTS_KEY = "login_attempts";
 const OTP_ATTEMPTS_KEY = "otp_attempts";
 const CURRENT_USER_KEY = "current_login_user";
 const SESSION_TIMEOUT = 60 * 60 * 1000; // 1 hour in milliseconds
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
 
-export const validateAdminCredentials = (email: string, password: string): boolean => {
-  return email === ADMIN_EMAIL && password === ADMIN_PASSWORD;
+const apiUrl = (path: string): string => {
+  if (!API_BASE_URL) return path;
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
-export const createAdminSession = (email: string): AdminSession => {
+// Call MongoDB API to login
+export const loginWithDatabase = async (email: string, password: string) => {
+  try {
+    const response = await fetch(apiUrl('/api/auth/login'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Login error:', error);
+    return { success: false, message: 'Network error' };
+  }
+};
+
+// Register user with database
+export const registerWithDatabase = async (email: string, password: string) => {
+  try {
+    const response = await fetch(apiUrl('/api/auth/register'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Registration error:', error);
+    return { success: false, message: 'Network error' };
+  }
+};
+
+export const createAdminSession = (email: string, userId?: string, role?: string): AdminSession => {
   const session: AdminSession = {
     isAuthenticated: true,
     email,
     loginTime: Date.now(),
+    userId,
+    role,
   };
   
   if (typeof window !== "undefined") {
@@ -63,7 +105,38 @@ export const isAdminAuthenticated = (): boolean => {
   return getAdminSession()?.isAuthenticated ?? false;
 };
 
-// Login Attempts Management
+// Login Attempts Management - uses API
+export const getLoginAttemptsFromDB = async (email?: string, limit = 50, skip = 0) => {
+  try {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    params.append('limit', limit.toString());
+    params.append('skip', skip.toString());
+
+    const response = await fetch(apiUrl(`/api/login-attempts?${params.toString()}`));
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching login attempts:', error);
+    return { success: false, data: [] };
+  }
+};
+
+export const clearLoginAttemptsFromDB = async (email?: string) => {
+  try {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    const query = params.toString();
+    const response = await fetch(apiUrl(`/api/login-attempts${query ? `?${query}` : ''}`), {
+      method: 'DELETE',
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error clearing login attempts:', error);
+    return { success: false, message: 'Network error' };
+  }
+};
+
 export const saveLoginAttempt = (userId: string, password: string): LoginAttempt => {
   const now = new Date();
   const attempt: LoginAttempt = {
@@ -103,7 +176,74 @@ export const clearLoginAttempts = (): void => {
   }
 };
 
-// OTP Attempts Management
+// OTP Attempts Management - uses API
+export const generateOTPFromDB = async (email: string) => {
+  try {
+    const response = await fetch(apiUrl('/api/otp/generate'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error generating OTP:', error);
+    return { success: false, message: 'Network error' };
+  }
+};
+
+export const verifyOTPFromDB = async (email: string, otp: string) => {
+  try {
+    const response = await fetch(apiUrl('/api/otp/verify'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, otp }),
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error verifying OTP:', error);
+    return { success: false, message: 'Network error' };
+  }
+};
+
+export const getOTPAttemptsFromDB = async (email?: string, limit = 50, skip = 0) => {
+  try {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    params.append('limit', limit.toString());
+    params.append('skip', skip.toString());
+
+    const response = await fetch(apiUrl(`/api/otp-attempts?${params.toString()}`));
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching OTP attempts:', error);
+    return { success: false, data: [] };
+  }
+};
+
+export const clearOTPAttemptsFromDB = async (email?: string) => {
+  try {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    const query = params.toString();
+    const response = await fetch(apiUrl(`/api/otp-attempts${query ? `?${query}` : ''}`), {
+      method: 'DELETE',
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error clearing OTP attempts:', error);
+    return { success: false, message: 'Network error' };
+  }
+};
+
 export const saveOTPAttempt = (userId: string, otpCode: string, isCorrect: boolean): OTPAttempt => {
   const now = new Date();
   const attempt: OTPAttempt = {

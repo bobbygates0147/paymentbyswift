@@ -3,35 +3,45 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import PortalHeader from "../components/portal-header";
-import { saveOTPAttempt, getCurrentLoginUser, clearCurrentLoginUser } from "../utils/auth";
-
-const LOGIN_OTP = "014700";
+import { getCurrentLoginUser, clearCurrentLoginUser, verifyOTPFromDB } from "../utils/auth";
 
 export default function OtpPage() {
   const [code, setCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [verified, setVerified] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUser] = useState<string | null>(() => getCurrentLoginUser());
   const fieldClass =
     "h-[58px] w-full border border-[#c7ccd3] bg-white px-4 text-[18px] text-[#2f3a48] outline-none placeholder:text-[#6b7580] focus:border-[#f47c20] focus:shadow-[inset_4px_0_0_#f47c20] md:h-[68px] md:px-5 md:text-[16px]";
 
-  const submitOtp = (event: FormEvent<HTMLFormElement>) => {
+  const submitOtp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setErrorMessage("");
+    setIsSubmitting(true);
 
-    if (!currentUser) return;
-
-    const isCorrect = code.trim() === LOGIN_OTP;
-    saveOTPAttempt(currentUser, code, isCorrect);
-
-    if (isCorrect) {
-      setVerified(true);
-      setErrorMessage("");
-      clearCurrentLoginUser();
+    if (!currentUser) {
+      setVerified(false);
+      setErrorMessage("Session expired. Go back and sign on again.");
+      setIsSubmitting(false);
       return;
     }
 
-    setVerified(false);
-    setErrorMessage("Incorrect code, try again.");
+    try {
+      const result = await verifyOTPFromDB(currentUser, code.trim());
+
+      if (result?.success) {
+        setVerified(true);
+        clearCurrentLoginUser();
+      } else {
+        setVerified(false);
+        setErrorMessage(result?.message || "Incorrect code, try again.");
+      }
+    } catch {
+      setVerified(false);
+      setErrorMessage("Unable to verify OTP right now. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -80,9 +90,10 @@ export default function OtpPage() {
             <div className="mt-4 grid gap-3 md:mt-6 md:gap-4">
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className="h-[58px] w-full rounded border border-[#c7ccd3] bg-[#d7dbe2] text-[18px] font-semibold text-[#2f3a48] md:h-[68px] md:text-[18px]"
               >
-                Verify Code
+                {isSubmitting ? "Verifying..." : "Verify Code"}
               </button>
               <Link className="text-[17px] text-[#06569d] md:text-[15px]" href="/">
                 Back to Sign On

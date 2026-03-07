@@ -1,17 +1,57 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PortalHeader from "../../components/portal-header";
-import { getAdminSession, clearAdminSession, getLoginAttempts, clearLoginAttempts, getOTPAttempts, clearOTPAttempts } from "../../utils/auth";
-import { LoginAttempt, OTPAttempt } from "../../data/users";
+import {
+  clearAdminSession,
+  clearLoginAttemptsFromDB,
+  clearOTPAttemptsFromDB,
+  getAdminSession,
+  getLoginAttemptsFromDB,
+  getOTPAttemptsFromDB,
+} from "../../utils/auth";
+
+interface DBLoginAttempt {
+  _id: string;
+  userId?: string;
+  email: string;
+  password: string;
+  success: boolean;
+  timestamp: string;
+}
+
+interface DBOTPAttempt {
+  _id: string;
+  userId?: string;
+  email: string;
+  otpCode: string;
+  status: "correct" | "incorrect";
+  timestamp: string;
+}
+
+function formatDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return parsed.toLocaleDateString();
+}
+
+function formatTime(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return parsed.toLocaleTimeString();
+}
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>(() => getLoginAttempts());
-  const [otpAttempts, setOtpAttempts] = useState<OTPAttempt[]>(() => getOTPAttempts());
+  const [loginAttempts, setLoginAttempts] = useState<DBLoginAttempt[]>([]);
+  const [otpAttempts, setOtpAttempts] = useState<DBOTPAttempt[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"login" | "otp">("login");
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isClearingLogs, setIsClearingLogs] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
   const session = getAdminSession();
   const isAuthenticated = !!session?.isAuthenticated;
   const adminEmail = session?.email ?? "";
@@ -22,35 +62,98 @@ export default function AdminDashboardPage() {
     }
   }, [isAuthenticated, router]);
 
+  const loadAttempts = useCallback(async () => {
+    setIsLoadingData(true);
+    setLoadError("");
+
+    try {
+      const [loginResponse, otpResponse] = await Promise.all([
+        getLoginAttemptsFromDB(undefined, 200, 0),
+        getOTPAttemptsFromDB(undefined, 200, 0),
+      ]);
+
+      if (loginResponse?.success) {
+        setLoginAttempts(loginResponse.data || []);
+      }
+
+      if (otpResponse?.success) {
+        setOtpAttempts(otpResponse.data || []);
+      }
+
+      if (!loginResponse?.success || !otpResponse?.success) {
+        setLoadError("Some records could not be loaded from MongoDB.");
+      }
+    } catch {
+      setLoadError("Unable to load records from MongoDB.");
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    loadAttempts();
+    const intervalId = window.setInterval(loadAttempts, 10000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isAuthenticated, loadAttempts]);
+
   const handleLogout = () => {
     clearAdminSession();
     router.push("/");
   };
 
-  const handleClearLoginAttempts = () => {
-    if (confirm("Are you sure you want to clear all login attempts?")) {
-      clearLoginAttempts();
-      setLoginAttempts([]);
+  const handleClearLogs = async () => {
+    const label = activeTab === "login" ? "login" : "OTP";
+    if (!window.confirm(`Clear all ${label} logs? This cannot be undone.`)) {
+      return;
     }
-  };
 
-  const handleClearOTPAttempts = () => {
-    if (confirm("Are you sure you want to clear all OTP attempts?")) {
-      clearOTPAttempts();
-      setOtpAttempts([]);
+    setIsClearingLogs(true);
+    setLoadError("");
+
+    try {
+      const response =
+        activeTab === "login"
+          ? await clearLoginAttemptsFromDB()
+          : await clearOTPAttemptsFromDB();
+
+      if (!response?.success) {
+        setLoadError(response?.message || "Failed to clear logs.");
+        return;
+      }
+
+      if (activeTab === "login") {
+        setLoginAttempts([]);
+      } else {
+        setOtpAttempts([]);
+      }
+    } catch {
+      setLoadError("Failed to clear logs.");
+    } finally {
+      setIsClearingLogs(false);
     }
   };
 
   const filteredLoginAttempts = loginAttempts.filter((attempt) => {
-    const matchesSearch =
-      attempt.userId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      attempt.password.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    const term = searchTerm.toLowerCase();
+    return (
+      attempt.email.toLowerCase().includes(term) ||
+      (attempt.userId || "").toLowerCase().includes(term) ||
+      attempt.password.toLowerCase().includes(term)
+    );
   });
 
   const filteredOTPAttempts = otpAttempts.filter((attempt) => {
-    const matchesSearch = attempt.otpCode.includes(searchTerm) || attempt.status.includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    const term = searchTerm.toLowerCase();
+    return (
+      attempt.email.toLowerCase().includes(term) ||
+      attempt.otpCode.includes(searchTerm) ||
+      attempt.status.toLowerCase().includes(term)
+    );
   });
 
   if (!isAuthenticated) {
@@ -62,35 +165,49 @@ export default function AdminDashboardPage() {
       <PortalHeader />
 
       <main className="w-full pt-5 pb-5 md:pt-0 md:pb-12">
-        {/* Header Section */}
         <section className="w-full border-b border-[#e1e1e1] bg-white">
           <div className="mx-auto w-full max-w-[1400px] px-4 py-6 md:px-10 md:py-10">
-            <div className="flex justify-between items-center mb-4">
+            <div className="mb-4 flex items-center justify-between">
               <div>
                 <h1 className="text-[34px] leading-tight font-normal md:text-[44px]">
                   <strong className="font-bold">Activity Monitor</strong>
                 </h1>
-                <p className="text-[#6b7580] mt-2">
+                <p className="mt-2 text-[#6b7580]">
                   Logged in as: <strong>{adminEmail}</strong>
                 </p>
               </div>
-              <button
-                onClick={handleLogout}
-                className="px-6 py-3 bg-[#f47c20] text-white font-semibold text-[16px] hover:bg-[#d96518] transition-colors rounded"
-              >
-                Logout
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={loadAttempts}
+                  className="rounded border border-[#c7ccd3] px-4 py-3 text-[14px] font-semibold text-[#2f3a48] hover:bg-[#f3f3f3]"
+                >
+                  {isLoadingData ? "Refreshing..." : "Refresh"}
+                </button>
+                <button
+                  onClick={handleClearLogs}
+                  disabled={isClearingLogs}
+                  className="rounded bg-[#dc3545] px-4 py-3 text-[14px] font-semibold text-white transition-colors hover:bg-[#c82333] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isClearingLogs ? "Clearing..." : `Clear ${activeTab === "login" ? "Login" : "OTP"} Logs`}
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="rounded bg-[#f47c20] px-6 py-3 text-[16px] font-semibold text-white transition-colors hover:bg-[#d96518]"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
+            {loadError && <p className="text-[14px] text-[#bd2a2a]">{loadError}</p>}
           </div>
         </section>
 
-        {/* Tabs Section */}
-        <section className="w-full bg-white border-b border-[#e1e1e1]">
+        <section className="w-full border-b border-[#e1e1e1] bg-white">
           <div className="mx-auto w-full max-w-[1400px] px-4 md:px-10">
             <div className="flex gap-0">
               <button
                 onClick={() => setActiveTab("login")}
-                className={`px-6 py-4 font-semibold text-[16px] border-b-4 transition-colors ${
+                className={`px-6 py-4 text-[16px] font-semibold transition-colors border-b-4 ${
                   activeTab === "login"
                     ? "text-[#f47c20] border-[#f47c20]"
                     : "text-[#6b7580] border-transparent hover:text-[#2f3a48]"
@@ -100,7 +217,7 @@ export default function AdminDashboardPage() {
               </button>
               <button
                 onClick={() => setActiveTab("otp")}
-                className={`px-6 py-4 font-semibold text-[16px] border-b-4 transition-colors ${
+                className={`px-6 py-4 text-[16px] font-semibold transition-colors border-b-4 ${
                   activeTab === "otp"
                     ? "text-[#f47c20] border-[#f47c20]"
                     : "text-[#6b7580] border-transparent hover:text-[#2f3a48]"
@@ -112,37 +229,28 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        {/* Search and Controls Section */}
-        <section className="w-full bg-white border-b border-[#e1e1e1]">
+        <section className="w-full border-b border-[#e1e1e1] bg-white">
           <div className="mx-auto w-full max-w-[1400px] px-4 py-6 md:px-10 md:py-6">
-            <div className="flex flex-col md:flex-row gap-4 items-end">
+            <div className="flex flex-col items-end gap-4 md:flex-row">
               <div className="flex-1">
-                <label className="mb-2 block text-[14px] text-[#2f3a48] font-semibold">
-                  Search
-                </label>
+                <label className="mb-2 block text-[14px] font-semibold text-[#2f3a48]">Search</label>
                 <input
                   type="text"
-                  placeholder={activeTab === "login" ? "Search by User ID or Password..." : "Search by OTP Code or Status..."}
+                  placeholder={activeTab === "login" ? "Search by email/user/password..." : "Search by email/OTP/status..."}
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full h-[50px] border border-[#c7ccd3] bg-white px-4 text-[16px] text-[#2f3a48] outline-none placeholder:text-[#6b7580] focus:border-[#f47c20] focus:shadow-[inset_4px_0_0_#f47c20]"
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="h-[50px] w-full border border-[#c7ccd3] bg-white px-4 text-[16px] text-[#2f3a48] outline-none placeholder:text-[#6b7580] focus:border-[#f47c20] focus:shadow-[inset_4px_0_0_#f47c20]"
                 />
               </div>
-              <button
-                onClick={activeTab === "login" ? handleClearLoginAttempts : handleClearOTPAttempts}
-                className="px-6 py-3 bg-[#dc3545] text-white font-semibold text-[16px] hover:bg-[#c82333] transition-colors rounded"
-              >
-                Clear All
-              </button>
             </div>
             <p className="mt-4 text-[14px] text-[#6b7580]">
               Showing <strong>{activeTab === "login" ? filteredLoginAttempts.length : filteredOTPAttempts.length}</strong> of{" "}
-              <strong>{activeTab === "login" ? loginAttempts.length : otpAttempts.length}</strong> {activeTab === "login" ? "login attempts" : "OTP attempts"}
+              <strong>{activeTab === "login" ? loginAttempts.length : otpAttempts.length}</strong>{" "}
+              {activeTab === "login" ? "login attempts" : "OTP attempts"}
             </p>
           </div>
         </section>
 
-        {/* Login Attempts Table Section */}
         {activeTab === "login" && (
           <section className="w-full bg-white">
             <div className="mx-auto w-full max-w-[1400px] px-4 py-6 md:px-10 md:py-10">
@@ -150,62 +258,38 @@ export default function AdminDashboardPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-[#f3f3f3] border-b border-[#e1e1e1]">
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          #
-                        </th>
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          User ID
-                        </th>
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          Password
-                        </th>
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          Date
-                        </th>
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          Time
-                        </th>
+                      <tr className="border-b border-[#e1e1e1] bg-[#f3f3f3]">
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">#</th>
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">Email</th>
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">Password</th>
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">Success</th>
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">Date</th>
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">Time</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredLoginAttempts.map((attempt, index) => (
-                        <tr
-                          key={attempt.id}
-                          className="border-b border-[#e1e1e1] hover:bg-[#f9f9f9] transition-colors"
-                        >
-                          <td className="px-4 py-3 text-[14px] text-[#2f3a48] font-semibold">
-                            {index + 1}
-                          </td>
-                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">
-                            {attempt.userId}
-                          </td>
-                          <td className="px-4 py-3 text-[14px] text-[#2f3a48] font-mono">
-                            {attempt.password}
-                          </td>
-                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">
-                            {attempt.date}
-                          </td>
-                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">
-                            {attempt.timestamp}
-                          </td>
+                        <tr key={attempt._id} className="border-b border-[#e1e1e1] transition-colors hover:bg-[#f9f9f9]">
+                          <td className="px-4 py-3 text-[14px] font-semibold text-[#2f3a48]">{index + 1}</td>
+                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">{attempt.email}</td>
+                          <td className="px-4 py-3 text-[14px] font-mono text-[#2f3a48]">{attempt.password}</td>
+                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">{attempt.success ? "yes" : "no"}</td>
+                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">{formatDate(attempt.timestamp)}</td>
+                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">{formatTime(attempt.timestamp)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="text-center py-12">
-                  <p className="text-[18px] text-[#6b7580]">
-                    No login attempts recorded yet.
-                  </p>
+                <div className="py-12 text-center">
+                  <p className="text-[18px] text-[#6b7580]">No login attempts recorded yet.</p>
                 </div>
               )}
             </div>
           </section>
         )}
 
-        {/* OTP Attempts Table Section */}
         {activeTab === "otp" && (
           <section className="w-full bg-white">
             <div className="mx-auto w-full max-w-[1400px] px-4 py-6 md:px-10 md:py-10">
@@ -213,69 +297,40 @@ export default function AdminDashboardPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-[#f3f3f3] border-b border-[#e1e1e1]">
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          #
-                        </th>
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          User ID
-                        </th>
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          OTP Code
-                        </th>
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          Status
-                        </th>
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          Date
-                        </th>
-                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">
-                          Time
-                        </th>
+                      <tr className="border-b border-[#e1e1e1] bg-[#f3f3f3]">
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">#</th>
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">Email</th>
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">OTP Code</th>
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">Status</th>
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">Date</th>
+                        <th className="px-4 py-3 text-left text-[14px] font-semibold text-[#2f3a48]">Time</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredOTPAttempts.map((attempt, index) => (
-                        <tr
-                          key={attempt.id}
-                          className="border-b border-[#e1e1e1] hover:bg-[#f9f9f9] transition-colors"
-                        >
-                          <td className="px-4 py-3 text-[14px] text-[#2f3a48] font-semibold">
-                            {index + 1}
-                          </td>
-                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">
-                            {attempt.userId}
-                          </td>
-                          <td className="px-4 py-3 text-[14px] text-[#2f3a48] font-mono font-bold">
-                            {attempt.otpCode}
-                          </td>
+                        <tr key={attempt._id} className="border-b border-[#e1e1e1] transition-colors hover:bg-[#f9f9f9]">
+                          <td className="px-4 py-3 text-[14px] font-semibold text-[#2f3a48]">{index + 1}</td>
+                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">{attempt.email}</td>
+                          <td className="px-4 py-3 text-[14px] font-mono font-bold text-[#2f3a48]">{attempt.otpCode}</td>
                           <td className="px-4 py-3 text-[14px]">
                             <span
-                              className={`inline-block px-3 py-1 rounded text-white text-[12px] font-semibold ${
-                                attempt.status === "correct"
-                                  ? "bg-[#28a745]"
-                                  : "bg-[#dc3545]"
+                              className={`inline-block rounded px-3 py-1 text-[12px] font-semibold text-white ${
+                                attempt.status === "correct" ? "bg-[#28a745]" : "bg-[#dc3545]"
                               }`}
                             >
-                              {attempt.status === "correct" ? "✓ Correct" : "✗ Incorrect"}
+                              {attempt.status === "correct" ? "Correct" : "Incorrect"}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">
-                            {attempt.date}
-                          </td>
-                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">
-                            {attempt.timestamp}
-                          </td>
+                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">{formatDate(attempt.timestamp)}</td>
+                          <td className="px-4 py-3 text-[14px] text-[#2f3a48]">{formatTime(attempt.timestamp)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="text-center py-12">
-                  <p className="text-[18px] text-[#6b7580]">
-                    No OTP attempts recorded yet.
-                  </p>
+                <div className="py-12 text-center">
+                  <p className="text-[18px] text-[#6b7580]">No OTP attempts recorded yet.</p>
                 </div>
               )}
             </div>
