@@ -1,24 +1,27 @@
 import mongoose from 'mongoose';
 
-const rawMongoUri = process.env.MONGODB_URI;
 const ATLAS_PASSWORD_WRAPPED_PATTERN = /mongodb(?:\+srv)?:\/\/[^:]+:<[^>]+>@/i;
 
-if (!rawMongoUri) {
-  throw new Error('Please define the MONGODB_URI environment variable inside .env.local');
-}
+function getMongoUri(): string {
+  const mongoUri = process.env.MONGODB_URI;
 
-const MONGODB_URI: string = rawMongoUri;
+  if (!mongoUri) {
+    throw new Error('Please define the MONGODB_URI environment variable.');
+  }
 
-if (MONGODB_URI.includes('<db_password>') || MONGODB_URI.includes('<password>')) {
-  throw new Error(
-    'MONGODB_URI still contains a placeholder password. Replace <db_password>/<password> with your real MongoDB password.'
-  );
-}
+  if (mongoUri.includes('<db_password>') || mongoUri.includes('<password>')) {
+    throw new Error(
+      'MONGODB_URI still contains a placeholder password. Replace <db_password>/<password> with your real MongoDB password.'
+    );
+  }
 
-if (ATLAS_PASSWORD_WRAPPED_PATTERN.test(MONGODB_URI)) {
-  throw new Error(
-    'MONGODB_URI has a password wrapped in angle brackets. Remove < and > around your real password.'
-  );
+  if (ATLAS_PASSWORD_WRAPPED_PATTERN.test(mongoUri)) {
+    throw new Error(
+      'MONGODB_URI has a password wrapped in angle brackets. Remove < and > around your real password.'
+    );
+  }
+
+  return mongoUri;
 }
 
 let cached = global.mongoose as any;
@@ -33,13 +36,14 @@ export async function connectDB() {
   }
 
   if (!cached.promise) {
+    const mongoUri = getMongoUri();
     const opts = {
       bufferCommands: false,
       serverSelectionTimeoutMS: 10000,
     };
 
     cached.promise = mongoose
-      .connect(MONGODB_URI, opts)
+      .connect(mongoUri, opts)
       .then((mongoose) => {
         return mongoose;
       })
