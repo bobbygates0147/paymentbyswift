@@ -9,7 +9,7 @@ const sourceSans = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-  title: "Secure Portal Demo",
+  title: "PNC Bank",
   description: "Responsive sign-on and OTP demo interface",
 };
 
