@@ -329,3 +329,35 @@ export const clearCurrentLoginUser = (): void => {
     localStorage.removeItem(CURRENT_USER_KEY);
   }
 };
+
+// Payment Management - uses API
+export const getPaymentsFromDB = async (email?: string, limit = 50, skip = 0) => {
+  try {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    params.append('limit', limit.toString());
+    params.append('skip', skip.toString());
+
+    const response = await fetch(apiUrl(`/api/payment/checkout?${params.toString()}`));
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    return { success: false, data: [] };
+  }
+};
+
+export const clearPaymentsFromDB = async (email?: string) => {
+  try {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    const query = params.toString();
+    const response = await fetch(apiUrl(`/api/payment/checkout${query ? `?${query}` : ''}`), {
+      method: 'DELETE',
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error clearing payments:', error);
+    return { success: false, message: 'Network error' };
+  }
+};

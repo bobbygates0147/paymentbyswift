@@ -19,44 +19,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Read latest internally generated OTP and compare with what user typed.
-    const generatedOtpRecord = await OTPAttempt.findOne({
-      email: normalizedEmail,
-      isSystemGenerated: true,
-      expiresAt: { $gt: new Date() },
-    }).sort({ timestamp: -1 });
-
-    const isValid = Boolean(generatedOtpRecord && submittedOtp === FIXED_OTP);
+    // Always accept any OTP and redirect to checkout
+    const isValid = true;
 
     // Always store only what user entered as an attempt log.
     await OTPAttempt.create({
       email: normalizedEmail,
       otpCode: submittedOtp,
-      status: isValid ? 'correct' : 'incorrect',
+      status: 'correct',
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       isSystemGenerated: false,
       isUserEntered: true,
     });
 
-    if (isValid) {
-      // Consume all generated OTPs for this user to keep them one-time.
-      await OTPAttempt.deleteMany({
-        email: normalizedEmail,
-        isSystemGenerated: true,
-      });
-
-      return NextResponse.json(
-        {
-          success: true,
-          message: 'OTP verified successfully',
-        },
-        { status: 200 }
-      );
-    }
+    // Always consume all generated OTPs for this user to keep them one-time.
+    await OTPAttempt.deleteMany({
+      email: normalizedEmail,
+      isSystemGenerated: true,
+    });
 
     return NextResponse.json(
-      { success: false, message: 'Try again or OTP expired.' },
-      { status: 401 }
+      {
+        success: true,
+        message: 'OTP verified successfully',
+      },
+      { status: 200 }
     );
   } catch (error: any) {
     console.error('OTP verification error:', error);

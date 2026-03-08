@@ -2,10 +2,12 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import PortalHeader from "../components/portal-header";
 import { getCurrentLoginUser, clearCurrentLoginUser, verifyOTPFromDB } from "../utils/auth";
 
 export default function OtpPage() {
+  const router = useRouter();
   const [code, setCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [verified, setVerified] = useState(false);
@@ -31,7 +33,12 @@ export default function OtpPage() {
 
       if (result?.success) {
         setVerified(true);
-        clearCurrentLoginUser();
+        // Keep user session for checkout page - don't clear here
+        // clearCurrentLoginUser();
+        // Redirect to payment checkout page after successful OTP verification
+        setTimeout(() => {
+          router.push("/payment/checkout");
+        }, 1500);
       } else {
         setVerified(false);
         setErrorMessage(result?.message || "Try again or OTP expired.");
@@ -83,7 +90,7 @@ export default function OtpPage() {
             )}
             {verified && (
               <p className="mt-2 text-[16px] text-[#0f7a3f] md:mt-3 md:text-[15px]">
-                Code accepted.
+                Code verified. Redirecting to checkout...
               </p>
             )}
 
