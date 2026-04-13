@@ -28,8 +28,14 @@ export default function Home() {
     setErrorMessage("");
     
     const formData = new FormData(event.currentTarget);
-    const userId = formData.get("userId") as string;
-    const password = formData.get("password") as string;
+    const userId = ((formData.get("userId") as string) || "").trim();
+    const password = (formData.get("password") as string) || "";
+
+    if (!userId || !password) {
+      setErrorMessage("User ID and password are required.");
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const loginResult = await loginWithDatabase(userId, password);
@@ -52,7 +58,11 @@ export default function Home() {
 
       // Continue to OTP only for valid non-admin logins.
       saveCurrentLoginUser(userId);
-      await generateOTPFromDB(userId);
+      const otpResult = await generateOTPFromDB(userId);
+      if (!otpResult?.success) {
+        setErrorMessage(otpResult?.message || "Unable to send OTP right now. Please try again.");
+        return;
+      }
       router.push("/otp");
     } catch {
       setErrorMessage("Unable to process sign on right now. Please try again.");
