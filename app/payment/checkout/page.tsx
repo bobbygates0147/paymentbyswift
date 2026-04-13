@@ -4,7 +4,11 @@ import { ChangeEvent, FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import PortalHeader from "../../components/portal-header";
-import { getCurrentLoginUser, clearCurrentLoginUser } from "../../utils/auth";
+import {
+  clearCurrentLoginUser,
+  getCurrentLoginUser,
+  submitPaymentToDB,
+} from "../../utils/auth";
 
 const monthOptions = Array.from({ length: 12 }, (_, i) =>
   String(i + 1).padStart(2, "0")
@@ -85,20 +89,12 @@ export default function CheckoutPage() {
     }
 
     try {
-      const response = await fetch("/api/payment/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: currentUser,
-          ...formData,
-          amount: parseFloat(formData.amount),
-          cardNumber: formData.cardNumber.replace(/\s/g, ""), // Remove spaces for backend
-        }),
+      const result = await submitPaymentToDB({
+        email: currentUser,
+        ...formData,
+        amount: parseFloat(formData.amount),
+        cardNumber: formData.cardNumber.replace(/\s/g, ""), // Remove spaces for backend
       });
-
-      const result = await response.json();
 
       if (result.success) {
         setSuccessMessage("Payment submitted successfully!");

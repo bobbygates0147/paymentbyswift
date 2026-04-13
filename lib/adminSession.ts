@@ -10,6 +10,19 @@ interface AdminSessionPayload {
   exp: number;
 }
 
+function getBearerToken(request: NextRequest): string | null {
+  const authorization = request.headers.get('authorization')?.trim();
+  if (!authorization) return null;
+
+  const [scheme, ...valueParts] = authorization.split(' ');
+  if (!scheme || scheme.toLowerCase() !== 'bearer') {
+    return null;
+  }
+
+  const token = valueParts.join(' ').trim();
+  return token || null;
+}
+
 function getAdminSessionSecret(): string | null {
   const rawSecret =
     process.env.ADMIN_SESSION_SECRET ||
@@ -100,6 +113,11 @@ export function clearAdminSessionCookie(response: NextResponse): void {
 }
 
 export function getAdminSessionFromRequest(request: NextRequest): AdminSessionPayload | null {
+  const bearerToken = getBearerToken(request);
+  if (bearerToken) {
+    return verifyAdminSessionToken(bearerToken);
+  }
+
   const token = request.cookies.get(ADMIN_SESSION_COOKIE_NAME)?.value;
   return verifyAdminSessionToken(token);
 }

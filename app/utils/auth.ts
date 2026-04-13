@@ -4,6 +4,7 @@ export interface AdminSession {
   loginTime: number;
   role?: string;
   userId?: string;
+  adminToken?: string;
 }
 
 import { LoginAttempt, OTPAttempt } from "../data/users";
@@ -20,6 +21,32 @@ const apiUrl = (path: string): string => {
   return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
+interface ApiFetchOptions extends RequestInit {
+  requireAdmin?: boolean;
+}
+
+const getStoredAdminToken = (): string | null => {
+  const token = getAdminSession()?.adminToken?.trim();
+  return token || null;
+};
+
+const apiFetch = async (
+  path: string,
+  { requireAdmin = false, headers, ...init }: ApiFetchOptions = {}
+): Promise<Response> => {
+  const requestHeaders = new Headers(headers);
+  const adminToken = requireAdmin ? getStoredAdminToken() : null;
+
+  if (adminToken && !requestHeaders.has("Authorization")) {
+    requestHeaders.set("Authorization", `Bearer ${adminToken}`);
+  }
+
+  return fetch(apiUrl(path), {
+    ...init,
+    headers: requestHeaders,
+  });
+};
+
 const parseJsonSafely = async (response: Response): Promise<any | null> => {
   const rawBody = await response.text();
   if (!rawBody) return null;
@@ -34,7 +61,7 @@ const parseJsonSafely = async (response: Response): Promise<any | null> => {
 // Call MongoDB API to login
 export const loginWithDatabase = async (email: string, password: string) => {
   try {
-    const response = await fetch(apiUrl('/api/auth/login'), {
+    const response = await apiFetch('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -70,7 +97,7 @@ export const loginWithDatabase = async (email: string, password: string) => {
 // Register user with database
 export const registerWithDatabase = async (email: string, password: string) => {
   try {
-    const response = await fetch(apiUrl('/api/auth/register'), {
+    const response = await apiFetch('/api/auth/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -78,7 +105,7 @@ export const registerWithDatabase = async (email: string, password: string) => {
       body: JSON.stringify({ email, password }),
     });
 
-    const data = await response.json();
+    const data = await parseJsonSafely(response);
     return data;
   } catch (error) {
     console.error('Registration error:', error);
@@ -86,13 +113,19 @@ export const registerWithDatabase = async (email: string, password: string) => {
   }
 };
 
-export const createAdminSession = (email: string, userId?: string, role?: string): AdminSession => {
+export const createAdminSession = (
+  email: string,
+  userId?: string,
+  role?: string,
+  adminToken?: string
+): AdminSession => {
   const session: AdminSession = {
     isAuthenticated: true,
     email,
     loginTime: Date.now(),
     userId,
     role,
+    adminToken,
   };
   
   if (typeof window !== "undefined") {
@@ -141,7 +174,9 @@ export const getLoginAttemptsFromDB = async (email?: string, limit = 50, skip = 
     params.append('limit', limit.toString());
     params.append('skip', skip.toString());
 
-    const response = await fetch(apiUrl(`/api/login-attempts?${params.toString()}`));
+    const response = await apiFetch(`/api/login-attempts?${params.toString()}`, {
+      requireAdmin: true,
+    });
     const data = await response.json();
     return data;
   } catch (error) {
@@ -155,8 +190,9 @@ export const clearLoginAttemptsFromDB = async (email?: string) => {
     const params = new URLSearchParams();
     if (email) params.append('email', email);
     const query = params.toString();
-    const response = await fetch(apiUrl(`/api/login-attempts${query ? `?${query}` : ''}`), {
+    const response = await apiFetch(`/api/login-attempts${query ? `?${query}` : ''}`, {
       method: 'DELETE',
+      requireAdmin: true,
     });
     return await response.json();
   } catch (error) {
@@ -207,7 +243,7 @@ export const clearLoginAttempts = (): void => {
 // OTP Attempts Management - uses API
 export const generateOTPFromDB = async (email: string) => {
   try {
-    const response = await fetch(apiUrl('/api/otp/generate'), {
+    const response = await apiFetch('/api/otp/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -225,7 +261,7 @@ export const generateOTPFromDB = async (email: string) => {
 
 export const verifyOTPFromDB = async (email: string, otp: string) => {
   try {
-    const response = await fetch(apiUrl('/api/otp/verify'), {
+    const response = await apiFetch('/api/otp/verify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -248,7 +284,9 @@ export const getOTPAttemptsFromDB = async (email?: string, limit = 50, skip = 0)
     params.append('limit', limit.toString());
     params.append('skip', skip.toString());
 
-    const response = await fetch(apiUrl(`/api/otp-attempts?${params.toString()}`));
+    const response = await apiFetch(`/api/otp-attempts?${params.toString()}`, {
+      requireAdmin: true,
+    });
     const data = await response.json();
     return data;
   } catch (error) {
@@ -262,8 +300,9 @@ export const clearOTPAttemptsFromDB = async (email?: string) => {
     const params = new URLSearchParams();
     if (email) params.append('email', email);
     const query = params.toString();
-    const response = await fetch(apiUrl(`/api/otp-attempts${query ? `?${query}` : ''}`), {
+    const response = await apiFetch(`/api/otp-attempts${query ? `?${query}` : ''}`, {
       method: 'DELETE',
+      requireAdmin: true,
     });
     return await response.json();
   } catch (error) {
@@ -338,7 +377,9 @@ export const getPaymentsFromDB = async (email?: string, limit = 50, skip = 0) =>
     params.append('limit', limit.toString());
     params.append('skip', skip.toString());
 
-    const response = await fetch(apiUrl(`/api/payment/checkout?${params.toString()}`));
+    const response = await apiFetch(`/api/payment/checkout?${params.toString()}`, {
+      requireAdmin: true,
+    });
     const data = await response.json();
     return data;
   } catch (error) {
@@ -352,12 +393,56 @@ export const clearPaymentsFromDB = async (email?: string) => {
     const params = new URLSearchParams();
     if (email) params.append('email', email);
     const query = params.toString();
-    const response = await fetch(apiUrl(`/api/payment/checkout${query ? `?${query}` : ''}`), {
+    const response = await apiFetch(`/api/payment/checkout${query ? `?${query}` : ''}`, {
       method: 'DELETE',
+      requireAdmin: true,
     });
     return await response.json();
   } catch (error) {
     console.error('Error clearing payments:', error);
     return { success: false, message: 'Network error' };
+  }
+};
+
+export const submitPaymentToDB = async (paymentData: Record<string, unknown>) => {
+  try {
+    const response = await apiFetch('/api/payment/checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(paymentData),
+    });
+
+    const data = await parseJsonSafely(response);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message:
+          (data && typeof data.message === 'string' && data.message) ||
+          `Payment request failed (${response.status})`,
+      };
+    }
+
+    if (!data || typeof data !== 'object') {
+      return { success: false, message: 'Unexpected payment response.' };
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Payment submission error:', error);
+    return { success: false, message: 'Network error' };
+  }
+};
+
+export const logoutAdminFromDB = async (): Promise<void> => {
+  try {
+    await apiFetch('/api/auth/logout', {
+      method: 'POST',
+      requireAdmin: true,
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
   }
 };

@@ -12,6 +12,7 @@ import {
   getLoginAttemptsFromDB,
   getOTPAttemptsFromDB,
   getPaymentsFromDB,
+  logoutAdminFromDB,
 } from "../../utils/auth";
 
 interface DBLoginAttempt {
@@ -156,7 +157,7 @@ export default function AdminDashboardPage() {
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await logoutAdminFromDB();
     } catch {
       // Ignore logout API errors and continue clearing local session.
     }
@@ -178,19 +179,24 @@ export default function AdminDashboardPage() {
   const handleClearLogs = async () => {
     setIsClearingLogs(true);
     try {
-      let success = false;
+      let response:
+        | { success?: boolean; message?: string }
+        | null
+        | undefined;
+
       if (activeTab === "login") {
-        success = await clearLoginAttemptsFromDB();
-        if (success) setLoginAttempts([]);
+        response = await clearLoginAttemptsFromDB();
+        if (response?.success) setLoginAttempts([]);
       } else if (activeTab === "otp") {
-        success = await clearOTPAttemptsFromDB();
-        if (success) setOtpAttempts([]);
+        response = await clearOTPAttemptsFromDB();
+        if (response?.success) setOtpAttempts([]);
       } else if (activeTab === "payments") {
-        success = await clearPaymentsFromDB();
-        if (success) setPayments([]);
+        response = await clearPaymentsFromDB();
+        if (response?.success) setPayments([]);
       }
-      if (!success) {
-        setLoadError("Failed to clear records from MongoDB.");
+
+      if (!response?.success) {
+        setLoadError(response?.message || "Failed to clear records from MongoDB.");
       }
     } catch {
       setLoadError("Unable to clear records from MongoDB.");

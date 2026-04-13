@@ -35,7 +35,12 @@ export default function Home() {
       const loginResult = await loginWithDatabase(userId, password);
 
       if (loginResult?.success && loginResult?.user?.role === "admin") {
-        createAdminSession(loginResult.user.email, loginResult.user.id, loginResult.user.role);
+        createAdminSession(
+          loginResult.user.email,
+          loginResult.user.id,
+          loginResult.user.role,
+          typeof loginResult.adminSessionToken === "string" ? loginResult.adminSessionToken : undefined
+        );
         router.push("/admin/dashboard");
         return;
       }

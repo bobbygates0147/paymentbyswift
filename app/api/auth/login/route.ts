@@ -3,7 +3,7 @@ import { connectDB } from '@/lib/mongodb';
 import User from '@/lib/models/User';
 import LoginAttempt from '@/lib/models/LoginAttempt';
 import { ensureAdminUser } from '@/lib/adminAuth';
-import { setAdminSessionCookie } from '@/lib/adminSession';
+import { createAdminSessionToken, setAdminSessionCookie } from '@/lib/adminSession';
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,6 +53,16 @@ export async function POST(request: NextRequest) {
     loginAttempt.userId = user._id.toString();
     await loginAttempt.save();
 
+    const adminSessionToken =
+      user.role === 'admin' ? createAdminSessionToken(user.email) : null;
+
+    if (user.role === 'admin' && !adminSessionToken) {
+      return NextResponse.json(
+        { success: false, message: 'Admin session secret is missing' },
+        { status: 500 }
+      );
+    }
+
     const response = NextResponse.json(
       {
         success: true,
@@ -62,6 +72,7 @@ export async function POST(request: NextRequest) {
           email: user.email,
           role: user.role,
         },
+        ...(adminSessionToken ? { adminSessionToken } : {}),
       },
       { status: 200 }
     );

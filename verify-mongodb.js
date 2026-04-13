@@ -9,6 +9,8 @@ const mongoose = require('mongoose');
 require('dotenv').config({ path: '.env.local' });
 
 const MONGODB_URI = process.env.MONGODB_URI;
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
 const ATLAS_PASSWORD_WRAPPED_PATTERN = /mongodb(?:\+srv)?:\/\/[^:]+:<[^>]+>@/i;
 
 async function verifyMongoDB() {
@@ -17,7 +19,9 @@ async function verifyMongoDB() {
 
   console.log('\n1. ENVIRONMENT VARIABLES:');
   console.log('   MONGODB_URI:', MONGODB_URI ? 'Set' : 'Not Set');
-  console.log('   NEXT_PUBLIC_ADMIN_EMAIL:', process.env.NEXT_PUBLIC_ADMIN_EMAIL ? 'Set' : 'Not Set');
+  console.log('   ADMIN_EMAIL:', ADMIN_EMAIL ? 'Set' : 'Not Set');
+  console.log('   ADMIN_PASSWORD:', ADMIN_PASSWORD ? 'Set' : 'Not Set');
+  console.log('   ADMIN_SESSION_SECRET:', process.env.ADMIN_SESSION_SECRET ? 'Set' : 'Not Set');
   console.log('   NODE_ENV:', process.env.NODE_ENV || 'development');
 
   if (!MONGODB_URI) {
