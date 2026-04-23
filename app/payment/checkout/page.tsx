@@ -22,7 +22,6 @@ export default function CheckoutPage() {
   const [currentUser] = useState<string | null>(() => getCurrentLoginUser());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -79,7 +78,6 @@ export default function CheckoutPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage("");
-    setSuccessMessage("");
     setIsSubmitting(true);
 
     if (!currentUser) {
@@ -97,32 +95,8 @@ export default function CheckoutPage() {
       });
 
       if (result.success) {
-        setSuccessMessage("Payment submitted successfully!");
-        clearCurrentLoginUser(); // Clear session after successful payment
-        setFormData({
-          firstName: "",
-          lastName: "",
-          amount: "",
-          description: "",
-          paymentMethod: "credit-card",
-          paypalEmail: "",
-          paypalPassword: "",
-          cardFirstName: "",
-          cardLastName: "",
-          cardNumber: "",
-          securityCode: "",
-          expirationMonth: "",
-          expirationYear: "",
-          streetAddress: "",
-          streetAddress2: "",
-          city: "",
-          state: "",
-          postalCode: "",
-          country: "",
-        });
-        setTimeout(() => {
-          router.push("/");
-        }, 1500);
+        clearCurrentLoginUser();
+        router.push("/payment/submitted");
       } else {
         setErrorMessage(result.message || "Failed to submit payment.");
       }
@@ -545,11 +519,6 @@ export default function CheckoutPage() {
           {errorMessage && (
             <p className="rounded-[4px] border border-[#e2a2a6] bg-[#f8d7da] p-3 text-[14px] text-[#ab2f39]">
               {errorMessage}
-            </p>
-          )}
-          {successMessage && (
-            <p className="rounded-[4px] border border-[#8bc49c] bg-[#d6f0dd] p-3 text-[14px] text-[#0f7a3f]">
-              {successMessage}
             </p>
           )}
 
